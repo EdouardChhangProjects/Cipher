@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from math import sqrt, ceil
+
+
+def parse_args() -> tuple[str, str, int]:
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        "message",
+        type=str,
+        help="a message, made of ASCII characters",
+    )
+
+    parser.add_argument(
+        "key",
+        type=str,
+        help="the encryption key, made of ASCII characters",
+    )
+
+    parser.add_argument(
+        "flag",
+        type=int,
+        choices=[0, 1],
+        help="0 for the message to be encrypted, 1 to be decrypted",
+    )
+
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        exit(84)
+
+    return args.message, args.key, args.flag
+
+
+def generate_empty_matrix(x: int, y: int) -> list[list[float]]:
+    matrix: list[list[float]] = list()
+    for i in range(y):
+        matrix.append([0 for i in range(x)])
+    return matrix
+
+
+def print_key_matrix(matrix: list[list[float]]) -> None:
+    print("Key matrix:")
+    for x in range(len(matrix)):
+        for y in range(len(matrix[x])):
+            if y != 0 and y != len(matrix):
+                print("\t", end="")
+            print(matrix[x][y], end="")
+        print("")
+    print("")
+    return None
+
+
+def print_key_matrix_decrypt(matrix: list[list[float]]) -> None:
+    print("Key matrix:")
+    for x in range(len(matrix)):
+        for y in range(len(matrix[x])):
+            if y != 0 and y != len(matrix):
+                print("\t", end="")
+            if matrix[x][y] != 0:
+                print(f"{(matrix[x][y]):.3f}", end="")
+            else:
+                print("0.0", end="")
+        print("")
+    print("")
+    return None
+
+
+def fill_matrix(message: str, matrix: list[list[float]]) -> None:
+    length: int = len(matrix[0])
+    i: int = 0
+    x: int = 0
+    y: int = 0
+
+    while i < len(message):
+        matrix[x][y] = ord(message[i])
+        i += 1
+        y += 1
+        if y >= length:
+            y = 0
+            x += 1
+    return
+
+
+def init_matrix(message: str) -> list[list[float]]:
+    len_matrix: int = ceil(sqrt(len(message)))
+    matrix: list[list[float]] = generate_empty_matrix(len_matrix, len_matrix)
+    fill_matrix(message, matrix)
+    return matrix
+
+
+def init_matrix_message(message: str, base_length: int) -> list[list[float]]:
+    length_matrix: int = ceil(len(message) / base_length)
+    matrix: list[list[float]] = generate_empty_matrix(base_length, length_matrix)
+    fill_matrix(message, matrix)
+    return matrix
+
+
+def init_matrix_encrypted(message: str, base_length: int) -> list[list[float]]:
+    tab: list[str] = message.split(" ")
+    matrix: list[list[float]] = generate_empty_matrix(
+        base_length, ceil(len(tab) / base_length)
+    )
+    x: int = 0
+    y: int = 0
+    for i in range(len(tab)):
+        matrix[x][y] = int(tab[i])
+        y += 1
+        if y >= base_length:
+            y = 0
+            x += 1
+    return matrix
+
+
+def fuse_matrix(old: list[list[float]], new: list[list[float]]) -> list[list[float]]:
+
+    fused: list[list[float]] = generate_empty_matrix(len(old[0]), len(old))
+
+    for x in range(len(old)):
+        for y in range(len(old[0])):
+            for l in range(len(old[0])):
+                fused[x][l] += old[x][y] * new[y][l]
+    return fused
+
+
+def calculate_2x2_determinant(matrix: list[list[float]]) -> float:
+
+    return matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]
+
+
+def transpose_matrix(matrix: list[list[float]]) -> list[list[float]]:
+    new_matrix: list[list[float]] = generate_empty_matrix(len(matrix[0]), len(matrix))
+    for x in range(len(matrix)):
+        for y in range(len(matrix)):
+            new_matrix[x][y] = matrix[y][x]
+    return new_matrix
+
+
+def reduced_matrix(
+    matrix: list[list[float]], ignore_x: int, ignore_y: int
+) -> list[list[float]]:
+    i: int = 0
+    j: int = 0
+    tmp_matrix: list[list[float]] = generate_empty_matrix(
+        len(matrix) - 1, len(matrix) - 1
+    )
+    for x in range(len(matrix)):
+        for y in range(len(matrix)):
+            if x != ignore_x and y != ignore_y:
+                tmp_matrix[i][j] = matrix[x][y]
+                j += 1
+                if j >= len(matrix) - 1:
+                    j = 0
+                    i += 1
+    return tmp_matrix
+
+
+def calculate_determinant(matrix: list[list[float]], len_matrix: int) -> float:
+
+    if len(matrix) <= 2:
+        return calculate_2x2_determinant(matrix)
+
+    tmp_matrix: list[list[float]]
+    determinant: int = 0
+    for i in range(len_matrix):
+        tmp_matrix = reduced_matrix(matrix, 0, i)
+        determinant += (
+            matrix[0][i]
+            * ((-1) ** i)
+            * calculate_determinant(tmp_matrix, len_matrix - 1)
+        )
+    return determinant
+
+
+def comatrix(matrix: list[list[float]]) -> list[list[float]]:
+    result: list[list[float]] = generate_empty_matrix(len(matrix), len(matrix))
+    for i in range(len(matrix)):
+        for j in range(len(matrix)):
+            result[i][j] = (-1) ** (i + j) * calculate_determinant(
+                reduced_matrix(matrix, i, j), len(matrix) - 1
+            )
+    return result
+
+
+def decrypt_matrix(old: list[list[float]], new: list[list[float]]) -> list[list[float]]:
+    result: list[list[float]] = transpose_matrix((comatrix(new)))
+    det: float = 1 / calculate_determinant(new, len(new))
+    for i in range(len(result)):
+        for j in range(len(result)):
+            result[i][j] *= det
+    return result
+
+
+def main() -> int:
+    message, key, flag = parse_args()
+
+    matrix_message: list[list[float]]
+    matrix_key: list[list[float]] = init_matrix(key)
+
+    if flag == 0:
+        matrix_message = init_matrix_message(message, len(matrix_key))
+        matrix_res: list[list[float]] = fuse_matrix(matrix_message, matrix_key)
+        print_key_matrix(matrix_key)
+        print("Encrypted message:")
+        for x in range(len(matrix_res)):
+            for y in range(len(matrix_res[x])):
+                if (x != 0) or (y != 0):
+                    print(" ", end="")
+                print(matrix_res[x][y], end="")
+    else:
+        matrix_message = init_matrix_encrypted(message, len(matrix_key))
+        matrix_res = decrypt_matrix(matrix_message, matrix_key)
+        print_key_matrix_decrypt(matrix_res)
+        matrix_res = fuse_matrix(matrix_message, matrix_res)
+        print("Decrypted message:")
+        for x in range(len(matrix_res)):
+            for y in range(len(matrix_res[x])):
+                print(chr(int(matrix_res[x][y] + 0.2)), end="")
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())
